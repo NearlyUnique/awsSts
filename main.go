@@ -34,6 +34,7 @@ const (
 var (
 	profileName = "saml"
 	dumpXML     = false
+	verbose     = false
 )
 
 type (
@@ -58,6 +59,7 @@ func main() {
 	// iniFile := flag.String("credentials", "", "override default credentials file to write to")
 	v := flag.Bool("version", false, "Display version")
 	dx := flag.Bool("dump-xml", false, "dump XML from AWS")
+	vb := flag.Bool("verbose", true, "Verbose output")
 	u := flag.Usage
 	flag.Usage = func() {
 		fmt.Printf("AWS STS temporary credentials helper\n"+
@@ -74,6 +76,7 @@ func main() {
 	}
 	profileName = *p
 	dumpXML = *dx
+	verbose = *vb
 
 	targetURL, err := getLoginURL()
 	exitErr(err, "%s environment variable missing", urlEnv)
@@ -90,8 +93,11 @@ func main() {
 	xml, assertion, err := getSaml(resp)
 	exitErr(err, "Unable to read SAML")
 
-	arn, err := extractArns(xml)
+	arns, err := extractArns(xml)
 	exitErr(err, "Failed to parse arns")
+
+	arn, err := selectRole(arns)
+	exitErr(err, "Failed to select role")
 
 	err = getTempConfigValues(*arn, assertion)
 	exitErr(err, "Failed to update config")
@@ -101,7 +107,7 @@ func getLoginURL() (string, error) {
 	if len(targetURL) == 0 {
 		return "", errors.New("Missing URL")
 	}
-	fmt.Printf("Checking env..\n%s=%s\n", urlEnv, targetURL)
+	log("Checking env..\n%s=%s\n", urlEnv, targetURL)
 	return targetURL, nil
 }
 func getLoginPageCookies(targetURL string) (*http.Client, *http.Response, error) {
@@ -145,7 +151,7 @@ func getSaml(resp *http.Response) (xml []byte, assertion string, err error) {
 	})
 	if len(xml) == 0 {
 		rawHTML, _ := doc.Html()
-		fmt.Printf("------------------------\n%v------------------------\n", rawHTML)
+		fmt.Fprintf(os.Stderr, "------------------------\n%v------------------------\n", rawHTML)
 	}
 	return xml, assertion, errors.Wrap(err, "Base64 decoding 'assertion' XML")
 }
@@ -155,12 +161,12 @@ func loginDetails() (form map[string]string, err error) {
 	if len(user) == 0 {
 		user, err = getUsername()
 	} else {
-		fmt.Printf("Username (from %s)='%s'\n", userEnv, user)
+		log("Username (from %s)='%s'\n", userEnv, user)
 	}
 	if err == nil && len(pass) == 0 {
 		pass, err = getPassword()
 	} else {
-		fmt.Printf("Password (from %s), length='%d'\n", passEnv, len(pass))
+		log("Password (from %s), length='%d'\n", passEnv, len(pass))
 	}
 	return map[string]string{
 		keyUsername: user,
@@ -232,10 +238,10 @@ func updateAwsConfig(key, secret, session string) error {
 		return errors.Wrapf(err, "Saving credentials file %s", iniFile)
 	}
 
-	fmt.Printf("Profile %q updated\n", profileName)
+	log("Profile %q updated\n", profileName)
 	return nil
 }
-func extractArns(raw []byte) (*Arn, error) {
+func extractArns(raw []byte) ([]Arn, error) {
 	response := Response{}
 	err := xml.Unmarshal(raw, &response)
 	if dumpXML {
@@ -257,8 +263,13 @@ func extractArns(raw []byte) (*Arn, error) {
 	}
 	if len(roles) == 0 {
 		return nil, errors.New("Expected Role 'https://aws.amazon.com/SAML/Attributes/Role'")
-	} else if len(roles) == 1 {
-		fmt.Printf("Using Role %q\n", roles[0].role)
+	}
+
+	return roles, nil
+}
+func selectRole(roles []Arn) (*Arn, error) {
+	if len(roles) == 1 {
+		log("Using Role %q\n", roles[0].role)
 		return &roles[0], nil
 	}
 	fmt.Println("Select role;")
@@ -284,7 +295,7 @@ func exitErr(err error, msg string, args ...interface{}) {
 		if len(args) > 0 {
 			msg = fmt.Sprintf(msg, args...)
 		}
-		fmt.Printf(msg+"\nErr:%v\n", err)
+		fmt.Fprintf(os.Stderr, msg+"\nErr:%v\n", err)
 		os.Exit(1)
 	}
 }
@@ -294,16 +305,10 @@ func (a AttributeValue) isRole() bool {
 func (a AttributeValue) arns() []Arn {
 	const providerKey = "saml-provider"
 	result := []Arn{}
-	// fmt.Printf("found %d values\n", len(a.Value))
 	for _, value := range a.Value {
-		// fmt.Printf("\tvalue[%d]=%s\n", i, value)
 		parts := strings.Split(value, ",")
-		// fmt.Printf("part count %d\n", len(parts))
 		if len(parts) == 2 {
-			fmt.Printf("\t\tpart[0]=%s ==? %s\n", parts[0], providerKey)
-			// fmt.Printf("\t\tpart[1]=%s\n", parts[1])
 			if strings.Index(parts[0], providerKey) >= 0 {
-				// fmt.Printf("provider:%s\n", parts[0])
 				result = append(result, Arn{parts[0], parts[1]})
 			}
 			if strings.Index(parts[1], providerKey) >= 0 {
@@ -312,4 +317,9 @@ func (a AttributeValue) arns() []Arn {
 		}
 	}
 	return result
+}
+func log(message string, args ...interface{}) {
+	if verbose {
+		fmt.Printf(message, args...)
+	}
 }
