@@ -1,4 +1,5 @@
 package main
+
 const (
-    appVersion=1
+	appVersion = 2
 )
