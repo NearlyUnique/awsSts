@@ -9,7 +9,7 @@ _For when I can't remember, STS stands for Security Token Service_
 # Install (with go tool chain)
 
 ```
-go install -u github.com/NearlyUnique/awsSts
+go get -u github.com/NearlyUnique/awsSts
 ```
 
 # Target Platforms
@@ -27,7 +27,6 @@ awsSts --profile default
 `--profile` is optional, default is `saml` but it is useful to seitch the default
 
 # Road Map
-1. Code review and tidy up
 1. Override credential file location via flag
 1. Keep running and auto refresh before expiry (optional)
 1. Deal with naming of INPUT tags in the login form, the Python sample did some work in this area, I want to improve the guessing ability and allow the user to define it if we can't guess.
