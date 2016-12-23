@@ -74,96 +74,106 @@ func main() {
 	profileName = *p
 	dumpXML = *dx
 
-	targetURL := getLoginURL()
-	client, resp := getLoginPageCookies(targetURL)
-	resp = postForm(client, targetURL, loginDetails())
-	getFormValues(resp)
+	targetURL, err := getLoginURL()
+	exitErr(err, "%s environment variable missing", urlEnv)
+
+	client, resp, err := getLoginPageCookies(targetURL)
+	exitErr(err, "Unable to request login page")
+
+	form, err := loginDetails()
+	exitErr(err, "Unable to get loging details")
+
+	resp, err = postForm(client, targetURL, form)
+	exitErr(err, "Unable to POST (%s) details", targetURL)
+
+	xml, assertion, err := getSaml(resp)
+	exitErr(err, "Unable to read SAML")
+
+	arn, err := extractArns(xml)
+	exitErr(err, "Failed to parse arns")
+
+	err = getTempConfigValues(*arn, assertion)
+	exitErr(err, "Failed to update config")
 }
-func getLoginURL() string {
+func getLoginURL() (string, error) {
 	targetURL := os.Getenv(urlEnv)
 	if len(targetURL) == 0 {
-		exitErr(fmt.Errorf("Missing URL"), "%s environment variable missing", urlEnv)
+		return "", fmt.Errorf("Missing URL")
 	}
 	fmt.Printf("Checking env..\n%s=%s\n", urlEnv, targetURL)
-	return targetURL
+	return targetURL, nil
 }
-func getLoginPageCookies(targetURL string) (*http.Client, *http.Response) {
+func getLoginPageCookies(targetURL string) (*http.Client, *http.Response, error) {
 	cookieJar, _ := cookiejar.New(nil)
 	client := &http.Client{
 		Jar: cookieJar,
 	}
 	resp, err := client.Get(targetURL)
-	exitErr(err, "Unable to request login page")
-	return client, resp
+	return client, resp, err
 }
-func postForm(client *http.Client, targetURL string, form map[string]string) *http.Response {
+func postForm(client *http.Client, targetURL string, form map[string]string) (*http.Response, error) {
 	f := url.Values{}
 	for k, v := range form {
 		f.Add(k, v)
 	}
 	req, err := http.NewRequest("POST", targetURL, strings.NewReader(f.Encode()))
-	exitErr(err, "Unable create POST (%s)", targetURL)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := client.Do(req)
-	exitErr(err, "Unable to POST (%s) details", targetURL)
-	return resp
+
+	return resp, err
 }
-func getFormValues(resp *http.Response) {
-	ok := false
+func getSaml(resp *http.Response) (xml []byte, assertion string, err error) {
 	doc, err := goquery.NewDocumentFromResponse(resp)
-	exitErr(err, "Unable to parse login details")
+	if err != nil {
+		return nil, "", err
+	}
 	inputs := []string{}
 	doc.Find("input").Each(func(i int, s *goquery.Selection) {
+		if err != nil {
+			return
+		}
 		name := attrOrEmpty(s, "name")
 		if name == "SAMLResponse" {
-			v := attrOrEmpty(s, "value")
-			xml, err := base64.StdEncoding.DecodeString(v)
-			exitErr(err, "Not base64")
-
-			arn, err := extractArns(xml)
-			exitErr(err, "Failed to parse arns")
-
-			getTempConfigValues(*arn, v)
-			ok = true
+			assertion = attrOrEmpty(s, "value")
+			xml, err = base64.StdEncoding.DecodeString(assertion)
 		}
 		inputs = append(inputs, name)
 	})
-	if !ok {
+	if len(xml) == 0 {
 		rawHTML, _ := doc.Html()
 		fmt.Printf("------------------------\n%v------------------------\n", rawHTML)
-		exitErr(fmt.Errorf("Failed to find SAMLResponse input element in inputs %v", inputs), "Failed to parse response form")
 	}
-	return
+	return xml, assertion, err
 }
-func loginDetails() map[string]string {
+func loginDetails() (form map[string]string, err error) {
 	user := os.Getenv(userEnv)
 	pass := os.Getenv(passEnv)
 	if len(user) == 0 {
-		user = getUsername()
+		user, err = getUsername()
 	} else {
 		fmt.Printf("Username (from %s)='%s'\n", userEnv, user)
 	}
-	if len(pass) == 0 {
-		pass = getPassword()
+	if err == nil && len(pass) == 0 {
+		pass, err = getPassword()
 	} else {
 		fmt.Printf("Password (from %s), length='%d'\n", passEnv, len(pass))
 	}
 	return map[string]string{
 		keyUsername: user,
 		keyPassword: pass,
-	}
+	}, err
 }
-func getUsername() string {
+func getUsername() (string, error) {
 	fmt.Print("User:")
-	u, err := bufio.NewReader(os.Stdin).ReadString('\n')
-	exitErr(err, "Unable to read form stdin")
-	return u
+	return bufio.NewReader(os.Stdin).ReadString('\n')
 }
-func getPassword() string {
+func getPassword() (string, error) {
 	fmt.Print("Password:")
 	pass, err := gopass.GetPasswd()
-	exitErr(err, "Unable to read form stdin")
-	return string(pass)
+	return string(pass), err
 }
 func attrOrEmpty(s *goquery.Selection, name string) string {
 	if r, ok := s.Attr(name); ok {
@@ -171,9 +181,11 @@ func attrOrEmpty(s *goquery.Selection, name string) string {
 	}
 	return ""
 }
-func getTempConfigValues(arn Arn, assertion string) {
+func getTempConfigValues(arn Arn, assertion string) error {
 	sess, err := session.NewSession()
-	exitErr(err, "failed to create session")
+	if err != nil {
+		return err
+	}
 	svc := sts.New(sess)
 	params := &sts.AssumeRoleWithSAMLInput{
 		PrincipalArn:  aws.String(arn.principal),
@@ -181,13 +193,15 @@ func getTempConfigValues(arn Arn, assertion string) {
 		SAMLAssertion: aws.String(assertion),
 	}
 	resp, err := svc.AssumeRoleWithSAML(params)
-	exitErr(err, "Unable to assume AWS role %s\n", arn.role)
-	updateAwsConfig(
+	if err != nil {
+		return err
+	}
+	return updateAwsConfig(
 		*resp.Credentials.AccessKeyId,
 		*resp.Credentials.SecretAccessKey,
 		*resp.Credentials.SessionToken)
 }
-func updateAwsConfig(key, secret, session string) {
+func updateAwsConfig(key, secret, session string) error {
 	home := "~"
 	for _, env := range []string{"HOME", "USERPROFILE", "HOMEPATH"} {
 		home = os.Getenv(env)
@@ -198,19 +212,26 @@ func updateAwsConfig(key, secret, session string) {
 	iniFile := path.Join(home, ".aws", "credentials")
 
 	cfg, err := ini.Load(iniFile)
-	exitErr(err, "Failed to load shared credentials '%s'", iniFile)
+	if err != nil {
+		return err
+	}
 	s, err := cfg.GetSection(profileName)
 	if err != nil {
 		s, err = cfg.NewSection(profileName)
 	}
-	exitErr(err, "Failed to find or create new profile (%s) config in '%s'", profileName, iniFile)
+	if err != nil {
+		return err
+	}
 	s.Key("aws_access_key_id").SetValue(key)
 	s.Key("aws_secret_access_key").SetValue(secret)
 	s.Key("aws_session_token").SetValue(session)
 	err = cfg.SaveTo(iniFile)
-	exitErr(err, "Failed to save shared credentials")
+	if err != nil {
+		return err
+	}
 
 	fmt.Printf("Profile %q updated\n", profileName)
+	return nil
 }
 func extractArns(raw []byte) (*Arn, error) {
 	response := Response{}
@@ -222,7 +243,9 @@ func extractArns(raw []byte) (*Arn, error) {
 			xml.MarshalIndent(response, "", "  ")
 		}
 	}
-	exitErr(err, "failed to parse SAML XML")
+	if err != nil {
+		return nil, err
+	}
 	roles := []Arn{}
 	for _, a := range response.Assertion {
 		if a.isRole() {
@@ -241,11 +264,15 @@ func extractArns(raw []byte) (*Arn, error) {
 		fmt.Printf("%d: %s\n", i, a.role)
 	}
 	num, err := bufio.NewReader(os.Stdin).ReadString('\n')
-	exitErr(err, "Unable to read choice")
+	if err != nil {
+		return nil, err
+	}
 	i, err := strconv.Atoi(strings.Trim(num, " \r\n"))
-	exitErr(err, "That's not a number '%s'", num)
+	if err != nil {
+		return nil, err
+	}
 	if i >= len(roles) {
-		exitErr(fmt.Errorf("Out of range"), "That's not a valid choice '%s'", num)
+		return nil, fmt.Errorf("The nuber %d was not offered", i)
 	}
 	return &roles[i], nil
 }
