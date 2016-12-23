@@ -19,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/howeyc/gopass"
+	"github.com/pkg/errors"
 	"gopkg.in/ini.v1"
 )
 
@@ -98,7 +99,7 @@ func main() {
 func getLoginURL() (string, error) {
 	targetURL := os.Getenv(urlEnv)
 	if len(targetURL) == 0 {
-		return "", fmt.Errorf("Missing URL")
+		return "", errors.New("Missing URL")
 	}
 	fmt.Printf("Checking env..\n%s=%s\n", urlEnv, targetURL)
 	return targetURL, nil
@@ -118,17 +119,17 @@ func postForm(client *http.Client, targetURL string, form map[string]string) (*h
 	}
 	req, err := http.NewRequest("POST", targetURL, strings.NewReader(f.Encode()))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Prepare loging form")
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := client.Do(req)
 
-	return resp, err
+	return resp, errors.Wrap(err, "Retrieving loging form")
 }
 func getSaml(resp *http.Response) (xml []byte, assertion string, err error) {
 	doc, err := goquery.NewDocumentFromResponse(resp)
 	if err != nil {
-		return nil, "", err
+		return nil, "", errors.Wrap(err, "Prepare login form for query INPUT elements")
 	}
 	inputs := []string{}
 	doc.Find("input").Each(func(i int, s *goquery.Selection) {
@@ -146,7 +147,7 @@ func getSaml(resp *http.Response) (xml []byte, assertion string, err error) {
 		rawHTML, _ := doc.Html()
 		fmt.Printf("------------------------\n%v------------------------\n", rawHTML)
 	}
-	return xml, assertion, err
+	return xml, assertion, errors.Wrap(err, "Base64 decoding 'assertion' XML")
 }
 func loginDetails() (form map[string]string, err error) {
 	user := os.Getenv(userEnv)
@@ -164,16 +165,17 @@ func loginDetails() (form map[string]string, err error) {
 	return map[string]string{
 		keyUsername: user,
 		keyPassword: pass,
-	}, err
+	}, err //error already wrapped
 }
 func getUsername() (string, error) {
 	fmt.Print("User:")
-	return bufio.NewReader(os.Stdin).ReadString('\n')
+	name, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	return name, errors.Wrap(err, "Reading username")
 }
 func getPassword() (string, error) {
 	fmt.Print("Password:")
 	pass, err := gopass.GetPasswd()
-	return string(pass), err
+	return string(pass), errors.Wrap(err, "Reading password")
 }
 func attrOrEmpty(s *goquery.Selection, name string) string {
 	if r, ok := s.Attr(name); ok {
@@ -184,7 +186,7 @@ func attrOrEmpty(s *goquery.Selection, name string) string {
 func getTempConfigValues(arn Arn, assertion string) error {
 	sess, err := session.NewSession()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "AWS session")
 	}
 	svc := sts.New(sess)
 	params := &sts.AssumeRoleWithSAMLInput{
@@ -194,7 +196,7 @@ func getTempConfigValues(arn Arn, assertion string) error {
 	}
 	resp, err := svc.AssumeRoleWithSAML(params)
 	if err != nil {
-		return err
+		return errors.Wrap(err, fmt.Sprintf("Unable to assume role:%s", arn.role))
 	}
 	return updateAwsConfig(
 		*resp.Credentials.AccessKeyId,
@@ -213,21 +215,21 @@ func updateAwsConfig(key, secret, session string) error {
 
 	cfg, err := ini.Load(iniFile)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "Loading credentials file %s", iniFile)
 	}
 	s, err := cfg.GetSection(profileName)
 	if err != nil {
 		s, err = cfg.NewSection(profileName)
 	}
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "Unable to add or create section '%s' in  %s", profileName, iniFile)
 	}
 	s.Key("aws_access_key_id").SetValue(key)
 	s.Key("aws_secret_access_key").SetValue(secret)
 	s.Key("aws_session_token").SetValue(session)
 	err = cfg.SaveTo(iniFile)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "Saving credentials file %s", iniFile)
 	}
 
 	fmt.Printf("Profile %q updated\n", profileName)
@@ -244,7 +246,7 @@ func extractArns(raw []byte) (*Arn, error) {
 		}
 	}
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Reading SAML XML")
 	}
 	roles := []Arn{}
 	for _, a := range response.Assertion {
@@ -254,7 +256,7 @@ func extractArns(raw []byte) (*Arn, error) {
 		}
 	}
 	if len(roles) == 0 {
-		return nil, fmt.Errorf("Expected Role 'https://aws.amazon.com/SAML/Attributes/Role'")
+		return nil, errors.New("Expected Role 'https://aws.amazon.com/SAML/Attributes/Role'")
 	} else if len(roles) == 1 {
 		fmt.Printf("Using Role %q\n", roles[0].role)
 		return &roles[0], nil
@@ -265,14 +267,15 @@ func extractArns(raw []byte) (*Arn, error) {
 	}
 	num, err := bufio.NewReader(os.Stdin).ReadString('\n')
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Failed to read user role selection")
 	}
-	i, err := strconv.Atoi(strings.Trim(num, " \r\n"))
+	num = strings.Trim(num, " \r\n")
+	i, err := strconv.Atoi(num)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "Unable to turn '%s' into a number", num)
 	}
 	if i >= len(roles) {
-		return nil, fmt.Errorf("The nuber %d was not offered", i)
+		return nil, errors.Errorf("The nuber %d was not offered", i)
 	}
 	return &roles[i], nil
 }
@@ -281,11 +284,10 @@ func exitErr(err error, msg string, args ...interface{}) {
 		if len(args) > 0 {
 			msg = fmt.Sprintf(msg, args...)
 		}
-		fmt.Println(msg+"\nErr:%v\n", err)
+		fmt.Printf(msg+"\nErr:%v\n", err)
 		os.Exit(1)
 	}
 }
-
 func (a AttributeValue) isRole() bool {
 	return a.Name == "https://aws.amazon.com/SAML/Attributes/Role"
 }
