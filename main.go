@@ -32,13 +32,14 @@ const (
 
 var (
 	profileName = "saml"
+	dumpXML     = false
 )
 
 type (
 	// AttributeValue .
 	AttributeValue struct {
-		Name  string `xml:"Name,attr"`
-		Value string `xml:"AttributeValue"`
+		Name  string   `xml:"Name,attr"`
+		Value []string `xml:"AttributeValue"`
 	}
 	// Response .
 	Response struct {
@@ -55,6 +56,7 @@ func main() {
 	p := flag.String("profile", "saml", "The profile to store these temproary credentials (use 'default' to make it the default)")
 	// iniFile := flag.String("credentials", "", "override default credentials file to write to")
 	v := flag.Bool("version", false, "Display version")
+	dx := flag.Bool("dump-xml", false, "dump XML from AWS")
 	u := flag.Usage
 	flag.Usage = func() {
 		fmt.Printf("AWS STS temporary credentials helper\n"+
@@ -70,6 +72,7 @@ func main() {
 		os.Exit(0)
 	}
 	profileName = *p
+	dumpXML = *dx
 
 	targetURL := getLoginURL()
 	client, resp := getLoginPageCookies(targetURL)
@@ -116,8 +119,11 @@ func getFormValues(resp *http.Response) {
 			v := attrOrEmpty(s, "value")
 			xml, err := base64.StdEncoding.DecodeString(v)
 			exitErr(err, "Not base64")
-			principal, role := extractArns(xml)
-			getTempConfigValues(principal, role, v)
+
+			arn, err := extractArns(xml)
+			exitErr(err, "Failed to parse arns")
+
+			getTempConfigValues(*arn, v)
 			ok = true
 		}
 		inputs = append(inputs, name)
@@ -165,17 +171,17 @@ func attrOrEmpty(s *goquery.Selection, name string) string {
 	}
 	return ""
 }
-func getTempConfigValues(principalArn, roleArn, assertion string) {
+func getTempConfigValues(arn Arn, assertion string) {
 	sess, err := session.NewSession()
 	exitErr(err, "failed to create session")
 	svc := sts.New(sess)
 	params := &sts.AssumeRoleWithSAMLInput{
-		PrincipalArn:  aws.String(principalArn),
-		RoleArn:       aws.String(roleArn),
+		PrincipalArn:  aws.String(arn.principal),
+		RoleArn:       aws.String(arn.role),
 		SAMLAssertion: aws.String(assertion),
 	}
 	resp, err := svc.AssumeRoleWithSAML(params)
-	exitErr(err, "Unable to assume AWS role %s\n")
+	exitErr(err, "Unable to assume AWS role %s\n", arn.role)
 	updateAwsConfig(
 		*resp.Credentials.AccessKeyId,
 		*resp.Credentials.SecretAccessKey,
@@ -206,23 +212,29 @@ func updateAwsConfig(key, secret, session string) {
 
 	fmt.Printf("Profile %q updated\n", profileName)
 }
-func extractArns(raw []byte) (principal, role string) {
+func extractArns(raw []byte) (*Arn, error) {
 	response := Response{}
 	err := xml.Unmarshal(raw, &response)
+	if dumpXML {
+		if err != nil {
+			fmt.Printf("-------XML--------\n%s\n------------------\n", string(raw))
+		} else {
+			xml.MarshalIndent(response, "", "  ")
+		}
+	}
 	exitErr(err, "failed to parse SAML XML")
 	roles := []Arn{}
 	for _, a := range response.Assertion {
 		if a.isRole() {
-			p, r := a.arns()
-			roles = append(roles, Arn{p, r})
+			roles = a.arns()
+			break
 		}
 	}
 	if len(roles) == 0 {
-		exitErr(fmt.Errorf("Expected Role 'https://aws.amazon.com/SAML/Attributes/Role'"), "Failed to parse arns")
-		return "", ""
+		return nil, fmt.Errorf("Expected Role 'https://aws.amazon.com/SAML/Attributes/Role'")
 	} else if len(roles) == 1 {
 		fmt.Printf("Using Role %q\n", roles[0].role)
-		return roles[0].principal, roles[0].role
+		return &roles[0], nil
 	}
 	fmt.Println("Select role;")
 	for i, a := range roles {
@@ -230,18 +242,18 @@ func extractArns(raw []byte) (principal, role string) {
 	}
 	num, err := bufio.NewReader(os.Stdin).ReadString('\n')
 	exitErr(err, "Unable to read choice")
-	i, err := strconv.Atoi(num)
+	i, err := strconv.Atoi(strings.Trim(num, " \r\n"))
 	exitErr(err, "That's not a number '%s'", num)
 	if i >= len(roles) {
 		exitErr(fmt.Errorf("Out of range"), "That's not a valid choice '%s'", num)
 	}
-	return roles[i].principal, roles[i].role
+	return &roles[i], nil
 }
 func exitErr(err error, msg string, args ...interface{}) {
-	if len(args) > 0 {
-		msg = fmt.Sprintf(msg, args...)
-	}
 	if err != nil {
+		if len(args) > 0 {
+			msg = fmt.Sprintf(msg, args...)
+		}
 		fmt.Println(msg+"\nErr:%v\n", err)
 		os.Exit(1)
 	}
@@ -250,16 +262,25 @@ func exitErr(err error, msg string, args ...interface{}) {
 func (a AttributeValue) isRole() bool {
 	return a.Name == "https://aws.amazon.com/SAML/Attributes/Role"
 }
-func (a AttributeValue) arns() (profile, rold string) {
+func (a AttributeValue) arns() []Arn {
 	const providerKey = "saml-provider"
-	arns := strings.Split(a.Value, ",")
-	if len(arns) == 2 {
-		if strings.IndexAny(arns[0], providerKey) >= 0 {
-			return arns[0], arns[1]
-		}
-		if strings.IndexAny(arns[1], providerKey) >= 0 {
-			return arns[1], arns[0]
+	result := []Arn{}
+	// fmt.Printf("found %d values\n", len(a.Value))
+	for _, value := range a.Value {
+		// fmt.Printf("\tvalue[%d]=%s\n", i, value)
+		parts := strings.Split(value, ",")
+		// fmt.Printf("part count %d\n", len(parts))
+		if len(parts) == 2 {
+			fmt.Printf("\t\tpart[0]=%s ==? %s\n", parts[0], providerKey)
+			// fmt.Printf("\t\tpart[1]=%s\n", parts[1])
+			if strings.Index(parts[0], providerKey) >= 0 {
+				// fmt.Printf("provider:%s\n", parts[0])
+				result = append(result, Arn{parts[0], parts[1]})
+			}
+			if strings.Index(parts[1], providerKey) >= 0 {
+				result = append(result, Arn{parts[1], parts[0]})
+			}
 		}
 	}
-	return "", ""
+	return result
 }
