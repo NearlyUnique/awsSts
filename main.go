@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -60,14 +59,14 @@ func main() {
 	v := flag.Bool("version", false, "Display version")
 	dx := flag.Bool("dump-xml", false, "dump XML from AWS")
 	vb := flag.Bool("verbose", true, "Verbose output")
-	u := flag.Usage
+	usage := flag.Usage
 	flag.Usage = func() {
 		fmt.Printf("AWS STS temporary credentials helper\n"+
 			"The following environment variables will be read\n"+
 			"\t%s - Url for STS login\n"+
 			"\t%s - Username to loing with\n"+
 			"\t%s - Password to login with\n", urlEnv, userEnv, passEnv)
-		u()
+		usage()
 	}
 	flag.Parse()
 	if *v {
@@ -276,19 +275,17 @@ func selectRole(roles []Arn) (*Arn, error) {
 	for i, a := range roles {
 		fmt.Printf("%d: %s\n", i, a.role)
 	}
-	num, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	fmt.Print("?")
+	num := -1
+	_, err := fmt.Scanf("%d", &num)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to read user role selection")
 	}
-	num = strings.Trim(num, " \r\n")
-	i, err := strconv.Atoi(num)
-	if err != nil {
-		return nil, errors.Wrapf(err, "Unable to turn '%s' into a number", num)
+	if num < 0 || num >= len(roles) {
+		return nil, errors.Errorf("The nuber %d was not offered", num)
 	}
-	if i >= len(roles) {
-		return nil, errors.Errorf("The nuber %d was not offered", i)
-	}
-	return &roles[i], nil
+	fmt.Println(num)
+	return &roles[num], nil
 }
 func exitErr(err error, msg string, args ...interface{}) {
 	if err != nil {
