@@ -6,11 +6,13 @@ import (
 	"encoding/xml"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -32,7 +34,7 @@ const (
 
 var (
 	profileName = "saml"
-	dumpXML     = false
+	dumpWork    = false
 	verbose     = false
 )
 
@@ -57,8 +59,8 @@ func main() {
 	p := flag.String("profile", "saml", "The profile to store these temproary credentials (use 'default' to make it the default)")
 	// iniFile := flag.String("credentials", "", "override default credentials file to write to")
 	v := flag.Bool("version", false, "Display version")
-	dx := flag.Bool("dump-xml", false, "dump XML from AWS")
-	vb := flag.Bool("verbose", true, "Verbose output")
+	dx := flag.Bool("dump-work", false, "dump HTML and XML working content from AWS")
+	vb := flag.Bool("verbose", false, "Verbose output")
 	usage := flag.Usage
 	flag.Usage = func() {
 		fmt.Printf("AWS STS temporary credentials helper\n"+
@@ -74,7 +76,7 @@ func main() {
 		os.Exit(0)
 	}
 	profileName = *p
-	dumpXML = *dx
+	dumpWork = *dx
 	verbose = *vb
 
 	targetURL, err := getLoginURL()
@@ -115,6 +117,15 @@ func getLoginPageCookies(targetURL string) (*http.Client, *http.Response, error)
 		Jar: cookieJar,
 	}
 	resp, err := client.Get(targetURL)
+	if dumpWork && err != nil {
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			dumpFile("login-form-", body)
+		}
+		// don't quit because of diagnostics
+		err = nil
+	}
 	return client, resp, err
 }
 func postForm(client *http.Client, targetURL string, form map[string]string) (*http.Response, error) {
@@ -136,6 +147,10 @@ func getSaml(resp *http.Response) (xml []byte, assertion string, err error) {
 	if err != nil {
 		return nil, "", errors.Wrap(err, "Prepare login form for query INPUT elements")
 	}
+	if dumpWork {
+		rawHTML, _ := doc.Html()
+		dumpFile("login-response-", []byte(rawHTML))
+	}
 	inputs := []string{}
 	doc.Find("input").Each(func(i int, s *goquery.Selection) {
 		if err != nil {
@@ -149,8 +164,7 @@ func getSaml(resp *http.Response) (xml []byte, assertion string, err error) {
 		inputs = append(inputs, name)
 	})
 	if len(xml) == 0 {
-		rawHTML, _ := doc.Html()
-		fmt.Fprintf(os.Stderr, "------------------------\n%v------------------------\n", rawHTML)
+		return nil, "", errors.New("Failed to find SAML xml")
 	}
 	return xml, assertion, errors.Wrap(err, "Base64 decoding 'assertion' XML")
 }
@@ -243,12 +257,8 @@ func updateAwsConfig(key, secret, session string) error {
 func extractArns(raw []byte) ([]Arn, error) {
 	response := Response{}
 	err := xml.Unmarshal(raw, &response)
-	if dumpXML {
-		if err != nil {
-			fmt.Printf("-------XML--------\n%s\n------------------\n", string(raw))
-		} else {
-			xml.MarshalIndent(response, "", "  ")
-		}
+	if dumpWork {
+		dumpFile("saml-xml-", raw)
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "Reading SAML XML")
@@ -287,6 +297,22 @@ func selectRole(roles []Arn) (*Arn, error) {
 	fmt.Println(num)
 	return &roles[num], nil
 }
+func readInt(defaultValue int) (int, error) {
+	reader := bufio.NewReader(os.Stdin)
+	text, err := reader.ReadString('\n')
+	if err != nil {
+		return 0, errors.Wrap(err, "cannot read from stdin")
+	}
+	if len(text) == 0 {
+		return defaultValue, nil
+	}
+	if err != nil {
+		return 0, errors.Wrap(err, "not a numeber")
+	}
+	i, err := strconv.Atoi(text)
+
+	return i, nil
+}
 func exitErr(err error, msg string, args ...interface{}) {
 	if err != nil {
 		if len(args) > 0 {
@@ -314,6 +340,20 @@ func (a AttributeValue) arns() []Arn {
 		}
 	}
 	return result
+}
+func dumpFile(prefix string, content []byte) (string, error) {
+	tmpfile, err := ioutil.TempFile("", prefix)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create temp file")
+	}
+	if _, err := tmpfile.Write(content); err != nil {
+		return "", errors.Wrap(err, "Unable to write to temp file")
+	}
+	if err := tmpfile.Close(); err != nil {
+		return "", errors.Wrap(err, "failed to close temp file")
+	}
+	log("Dumped '%s'\n", tmpfile.Name())
+	return tmpfile.Name(), nil
 }
 func log(message string, args ...interface{}) {
 	if verbose {
