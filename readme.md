@@ -24,7 +24,9 @@ SET AWSSTS_USER=my-username@domain.company.org
 awsSts --profile default
 ```
 
-`--profile` is optional, default is `saml` but it is useful to seitch the default
+`--help` for full details
+
+`--profile` is optional, default is `saml` but it is useful to switch the default
 
 # Road Map
 1. Override credential file location via flag
