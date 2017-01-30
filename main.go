@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/base64"
 	"encoding/xml"
 	"flag"
@@ -12,15 +11,14 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
-	"github.com/howeyc/gopass"
 	"github.com/pkg/errors"
+	"github.com/vito/go-interact/interact"
 	"gopkg.in/ini.v1"
 )
 
@@ -61,6 +59,7 @@ func main() {
 	v := flag.Bool("version", false, "Display version")
 	dx := flag.Bool("dump-work", false, "dump HTML and XML working content from AWS")
 	vb := flag.Bool("verbose", false, "Verbose output")
+	loop := flag.Bool("auto", false, "If auto is enabled will allow refresh key without login details")
 	usage := flag.Usage
 	flag.Usage = func() {
 		fmt.Printf("AWS STS temporary credentials helper\n"+
@@ -99,9 +98,11 @@ func main() {
 
 	arn, err := selectRole(arns)
 	exitErr(err, "Failed to select role")
-
-	err = getTempConfigValues(*arn, assertion)
-	exitErr(err, "Failed to update config")
+	for ok := true; ok; {
+		err = getTempConfigValues(*arn, assertion)
+		exitErr(err, "Failed to update config")
+		ok = *loop && anyKeyOrQuit()
+	}
 }
 func getLoginURL() (string, error) {
 	targetURL := os.Getenv(urlEnv)
@@ -164,9 +165,20 @@ func getSaml(resp *http.Response) (xml []byte, assertion string, err error) {
 		inputs = append(inputs, name)
 	})
 	if len(xml) == 0 {
-		return nil, "", errors.New("Failed to find SAML xml")
+		msg := loginErrorText(doc)
+		if len(msg) == 0 {
+			msg = "Failed to find SAML xml"
+		}
+		return nil, "", errors.New(msg)
 	}
 	return xml, assertion, errors.Wrap(err, "Base64 decoding 'assertion' XML")
+}
+func loginErrorText(doc *goquery.Document) string {
+	sel := doc.Find("#errorText")
+	if sel != nil {
+		return strings.Trim(sel.Text(), " \t\r\n")
+	}
+	return ""
 }
 func loginDetails() (form map[string]string, err error) {
 	user := os.Getenv(userEnv)
@@ -187,14 +199,20 @@ func loginDetails() (form map[string]string, err error) {
 	}, err //error already wrapped
 }
 func getUsername() (string, error) {
-	fmt.Print("User:")
-	name, err := bufio.NewReader(os.Stdin).ReadString('\n')
-	return name, errors.Wrap(err, "Reading username")
+	var username = ""
+	err := interact.NewInteraction("Username").Resolve(interact.Required(&username))
+	if err != nil {
+		return "", errors.Wrap(err, "Reading username")
+	}
+	return string(username), nil
 }
 func getPassword() (string, error) {
-	fmt.Print("Password:")
-	pass, err := gopass.GetPasswd()
-	return string(pass), errors.Wrap(err, "Reading password")
+	var password interact.Password
+	err := interact.NewInteraction("Password").Resolve(interact.Required(&password))
+	if err != nil {
+		return "", errors.Wrap(err, "Reading password")
+	}
+	return string(password), nil
 }
 func attrOrEmpty(s *goquery.Selection, name string) string {
 	if r, ok := s.Attr(name); ok {
@@ -281,37 +299,19 @@ func selectRole(roles []Arn) (*Arn, error) {
 		log("Using Role %q\n", roles[0].role)
 		return &roles[0], nil
 	}
-	fmt.Println("Select role;")
+	var list []interact.Choice
 	for i, a := range roles {
-		fmt.Printf("%d: %s\n", i, a.role)
+		list = append(list, interact.Choice{Display: a.role, Value: i})
 	}
-	fmt.Print("?")
-	num := -1
-	_, err := fmt.Scanf("%d", &num)
+	choice := 0
+	err := interact.NewInteraction(
+		"Choose a role",
+		list...,
+	).Resolve(&choice)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to read user role selection")
+		return nil, errors.Wrap(err, "No choice")
 	}
-	if num < 0 || num >= len(roles) {
-		return nil, errors.Errorf("The nuber %d was not offered", num)
-	}
-	fmt.Println(num)
-	return &roles[num], nil
-}
-func readInt(defaultValue int) (int, error) {
-	reader := bufio.NewReader(os.Stdin)
-	text, err := reader.ReadString('\n')
-	if err != nil {
-		return 0, errors.Wrap(err, "cannot read from stdin")
-	}
-	if len(text) == 0 {
-		return defaultValue, nil
-	}
-	if err != nil {
-		return 0, errors.Wrap(err, "not a numeber")
-	}
-	i, err := strconv.Atoi(text)
-
-	return i, nil
+	return &roles[choice], nil
 }
 func exitErr(err error, msg string, args ...interface{}) {
 	if err != nil {
@@ -352,8 +352,20 @@ func dumpFile(prefix string, content []byte) (string, error) {
 	if err := tmpfile.Close(); err != nil {
 		return "", errors.Wrap(err, "failed to close temp file")
 	}
+	v := verbose
+	verbose = true
 	log("Dumped '%s'\n", tmpfile.Name())
+	verbose = v
 	return tmpfile.Name(), nil
+}
+func anyKeyOrQuit() bool {
+	choice := "a"
+	_ = interact.NewInteraction(
+		"Auto update key...",
+		interact.Choice{Display: "Quit", Value: "q"},
+		interact.Choice{Display: "Again", Value: "a"},
+	).Resolve(&choice)
+	return choice != "q"
 }
 func log(message string, args ...interface{}) {
 	if verbose {
