@@ -1,5 +1,3 @@
-package main
-
-const (
-	appVersion = "0.4"
-)
+package main 
+ 
+const appVersion = "0.5" 
