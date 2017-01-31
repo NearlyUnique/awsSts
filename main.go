@@ -85,7 +85,7 @@ func main() {
 	exitErr(err, "Unable to request login page")
 
 	form, err := loginDetails()
-	exitErr(err, "Unable to get loging details")
+	exitErr(err, "Unable to get login details")
 
 	resp, err = postForm(client, targetURL, form)
 	exitErr(err, "Unable to POST (%s) details", targetURL)
@@ -136,12 +136,12 @@ func postForm(client *http.Client, targetURL string, form map[string]string) (*h
 	}
 	req, err := http.NewRequest("POST", targetURL, strings.NewReader(f.Encode()))
 	if err != nil {
-		return nil, errors.Wrap(err, "Prepare loging form")
+		return nil, errors.Wrap(err, "Prepare login form")
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := client.Do(req)
 
-	return resp, errors.Wrap(err, "Retrieving loging form")
+	return resp, errors.Wrap(err, "Retrieving login form")
 }
 func getSaml(resp *http.Response) (xml []byte, assertion string, err error) {
 	doc, err := goquery.NewDocumentFromResponse(resp)
