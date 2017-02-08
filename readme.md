@@ -18,20 +18,22 @@ It works on Windows, there is no reason it won't work on Linux and OSX.
 
 # Usage
 
+Common scenario;
+- My STS web login web page is here: `https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices`
+- My other scripts are going to use the `default` AWS profile
+- Automatically select the role `arn:aws:iam::123456789:role/my-role`
+- Leave running in a state where I can `auto`matically refresh my token with one key press when it expires in an hour
+
 ```
-SET AWSSTS_URL=https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices
-awsSts --profile default
+awsSts --host https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices --profile default --role arn:aws:iam::123456789:role/my-role --auto
 ```
 
 `--help` for full details, including details of all parameters that can be read from environment.
-
-`--profile` is optional, default is `saml` but it is useful to switch the default.
 
 # Roadmap
 1. Override credential file location via flag
 1. Keep running and auto refresh before expiry (optional) [part done, see `--auto`]
 1. Deal with naming of INPUT tags in the login form, the Python sample did some work in this area, I want to improve the guessing ability and allow the user to define it if we can't guess.
-1. If there are no features in the aws cli, add features here to switch profiles round, eg. named to default and vice versa, delete, add default region
 
 # How it works
 
