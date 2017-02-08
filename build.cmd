@@ -12,6 +12,7 @@ md %bin%
 
 if /i "%tag%"=="" (
     echo No Tag supplied
+    set tag=dev
 ) else (
     echo package main > version.go
     echo. >> version.go
