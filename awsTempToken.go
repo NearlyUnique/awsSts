@@ -106,9 +106,14 @@ func selectRole(defaultRole string, roles []Arn) (*Arn, error) {
 	return &roles[choice-1], nil
 }
 func loginErrorText(doc *goquery.Document) string {
-	sel := doc.Find("#errorText")
-	if sel != nil {
-		return strings.Trim(sel.Text(), " \t\r\n")
+	for _, id := range []string{"#errorText", "#expiredNotification"} {
+		sel := doc.Find(id)
+		if sel != nil {
+			msg := strings.Trim(sel.Text(), " \t\r\n")
+			if len(msg) > 0 {
+				return msg
+			}
+		}
 	}
 	return ""
 }
