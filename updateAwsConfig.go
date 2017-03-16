@@ -31,6 +31,9 @@ func getTempConfigValues(options *options, arn Arn, assertion string) error {
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("Unable to assume role:%s", arn.role))
 	}
+	if options.displayToken {
+		fmt.Printf("AWS_SESSION_TOKEN=%s\n", *resp.Credentials.SessionToken)
+	}
 	return updateAwsConfigFile(
 		options,
 		*resp.Credentials.AccessKeyId,

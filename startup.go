@@ -9,15 +9,16 @@ import (
 
 type (
 	options struct {
-		profileName string
-		targetURL   string
-		username    string
-		password    string
-		role        string
-		dumpWork    bool
-		verbose     bool
-		version     bool
-		loop        bool
+		profileName  string
+		targetURL    string
+		username     string
+		password     string
+		role         string
+		dumpWork     bool
+		verbose      bool
+		version      bool
+		loop         bool
+		displayToken bool
 	}
 )
 
@@ -32,6 +33,7 @@ func startupOptions() *options {
 	dx := flag.Bool("dump-work", false, "dump HTML and XML working content from AWS")
 	vb := flag.Bool("verbose", false, "Verbose output")
 	loop := flag.Bool("auto", false, "If auto is enabled will allow refresh key without login details")
+	token := flag.Bool("token", false, "Display temporary AWS session token")
 	usage := flag.Usage
 
 	flag.Usage = func() {
@@ -53,6 +55,7 @@ func startupOptions() *options {
 	o.version = *v
 	o.loop = *loop
 	o.role = *role
+	o.displayToken = *token
 	if len(*host) > 0 {
 		o.targetURL = *host
 	} else {
