@@ -12,7 +12,7 @@ _For when I can't remember, STS stands for Security Token Service_
 go get -u github.com/NearlyUnique/awsSts
 ```
 
-Download the [Current release](./releases/) for your platform.
+Download the [Current release](/NearlyUnique/awsSts/releases/) for your platform.
 
 [Change log](changelog.md)
 
