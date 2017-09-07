@@ -12,9 +12,13 @@ _For when I can't remember, STS stands for Security Token Service_
 go get -u github.com/NearlyUnique/awsSts
 ```
 
+Download the [Current release](./releases/) for your platform.
+
+[Change log](changelog.md)
+
 # Target Platforms
 
-It works on Windows, there is no reason it won't work on Linux and OSX.
+It works on Windows, I've tested linux (bash on windows) there is no reason it won't work on OSX.
 
 # Usage
 
@@ -25,15 +29,32 @@ Common scenario;
 - Leave running in a state where I can `auto`matically refresh my token with one key press when it expires in an hour
 
 ```
-awsSts --host https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices --profile default --role arn:aws:iam::123456789:role/my-role --auto
+awsSts logon --url https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices --profile default --role arn:aws:iam::123456789:role/my-role
 ```
 
 `--help` for full details, including details of all parameters that can be read from environment.
 
 # Roadmap
 1. Override credential file location via flag
-1. Keep running and auto refresh before expiry (optional) [part done, see `--auto`]
+1. Keep running and auto refresh before expiry (optional)
 1. Deal with naming of INPUT tags in the login form, the Python sample did some work in this area, I want to improve the guessing ability and allow the user to define it if we can't guess.
+1. add command to ease iam user creation
+1. add command to rotate iam user secrets
+1. Auto upgrade
+  - use `runtime.GOOS` and `_VERISON`
+  - call `GET https://api.github.com/repos/NearlyUnique/awsSts/releases/latest`
+```json
+  {
+    "tag_name": "0.7",
+      "assets": [
+        {
+          "name": "awsSts-0.7-linux",
+          "browser_download_url": "https://some-url"
+        }
+      ]
+  }`
+```
+  - the `browser_download_url` may give a redirect
 
 # How it works
 

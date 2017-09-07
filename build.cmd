@@ -14,16 +14,20 @@ if /i "%tag%"=="" (
     echo No Tag supplied
     set tag=dev
 ) else (
-    echo package main > version.go
-    echo. >> version.go
-    echo const appVersion = "%tag%" >> version.go
+    pushd cmd
 
-    git add version.go
+    echo package cmd > ver.go
+    echo. >> ver.go
+    echo const _VERSION = "%tag%" >> ver.go
+
+    git add ver.go
     git commit -m "Running release for %tag%"
     git tag %tag%
+
+    popd
 )
 
-go test 
+go test ./...
 call :THE_BUILD windows
 
 if /i "%option%"=="release" (
