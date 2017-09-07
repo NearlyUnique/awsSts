@@ -1,3 +1,3 @@
-package cmd
-
-const _VERSION = "v0.8"
+package cmd 
+ 
+const _VERSION = "0.8" 
