@@ -47,7 +47,7 @@ func execLogon(cmd *cobra.Command, args []string) {
 	fatalExit(err, "Getting user credentials")
 	sso := SSO{
 		Client: &http.Client{
-			Timeout: time.Second,
+			Timeout: time.Second * 5,
 		},
 		URL: uri,
 	}
