@@ -31,11 +31,13 @@ func init() {
 	logonCmd.Flags().StringP("role", "r", "", "Role to auto select, if one one role available it is auto selected")
 
 	logonCmd.Flags().Bool("token", false, "If set the token is displayed (useful for tools that don't use aws credentials file)")
+	logonCmd.Flags().Int64("durationSeconds", 3600, "Use to define the duration of session validity in seconds")
 
 	bindFlags(RootCmd, "logon")
 }
 
 func execLogon(cmd *cobra.Command, args []string) {
+
 	uri := viper.GetString("url")
 
 	if len(uri) == 0 {
@@ -58,13 +60,15 @@ func execLogon(cmd *cobra.Command, args []string) {
 	cache, close := loadCache()
 	defer close()
 
-	arns, err := ExtractRoles(saml, cache)
+	durationSeconds := viper.GetInt64("durationSeconds")
+
+	arns, err := ExtractRoles(saml, cache, durationSeconds)
 	fatalExit(err, "Extracting roles")
 	arn, err := SelectRole(viper.GetString("role"), arns)
 	fatalExit(err, "Role selection")
 
 	if !arn.hasCredentials() {
-		assumeRole(session.New(), arn, saml.AsAssertion())
+		assumeRole(session.New(), arn, saml.AsAssertion(), durationSeconds)
 	}
 	if viper.GetBool("token") {
 		fmt.Printf("AWS_SESSION_TOKEN=%s\n", arn.sessionToken)

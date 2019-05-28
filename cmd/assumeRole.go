@@ -7,12 +7,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-func assumeRole(sess *session.Session, arn *Arn, assertion string) error {
+func assumeRole(sess *session.Session, arn *Arn, assertion string, durationSeconds int64) error {
 	svc := sts.New(sess)
 	params := &sts.AssumeRoleWithSAMLInput{
-		PrincipalArn:  aws.String(arn.principal),
-		RoleArn:       aws.String(arn.role),
-		SAMLAssertion: aws.String(assertion),
+		PrincipalArn:    aws.String(arn.principal),
+		RoleArn:         aws.String(arn.role),
+		SAMLAssertion:   aws.String(assertion),
+		DurationSeconds: aws.Int64(durationSeconds),
 	}
 	resp, err := svc.AssumeRoleWithSAML(params)
 	if err != nil {

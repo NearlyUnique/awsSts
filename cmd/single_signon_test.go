@@ -1,11 +1,10 @@
 package cmd_test
 
 import (
+	"github.com/NearlyUnique/awsSts/cmd"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/NearlyUnique/awsSts/cmd"
 )
 
 const (
