@@ -33,7 +33,7 @@ type (
 )
 
 //ExtractRoles from the saml single sign on response
-func ExtractRoles(saml *Saml, cache *AccountAliasCache) (arns []Arn, err error) {
+func ExtractRoles(saml *Saml, cache *AccountAliasCache, durationSeconds int64) (arns []Arn, err error) {
 	var xml []byte
 	xml, err = saml.AsXML()
 	if err != nil {
@@ -43,7 +43,7 @@ func ExtractRoles(saml *Saml, cache *AccountAliasCache) (arns []Arn, err error) 
 	if err != nil {
 		return arns, err
 	}
-	lookupAccountAliases(arns, saml.AsAssertion(), cache)
+	lookupAccountAliases(arns, saml.AsAssertion(), cache, durationSeconds)
 	return arns, err
 }
 
@@ -89,7 +89,7 @@ func (a AttributeValue) arns() []Arn {
 	return result
 }
 
-func lookupAccountAliases(arns []Arn, assertion string, cache *AccountAliasCache) {
+func lookupAccountAliases(arns []Arn, assertion string, cache *AccountAliasCache, durationSeconds int64) {
 	// fix: arn changes do no leave this func
 	for i, arn := range arns {
 		alias, found := cache.findAlias(arn.role)
@@ -100,7 +100,7 @@ func lookupAccountAliases(arns []Arn, assertion string, cache *AccountAliasCache
 		clearCredentials()
 
 		sess := session.New()
-		err := assumeRole(sess, &arn, assertion)
+		err := assumeRole(sess, &arn, assertion, durationSeconds)
 
 		setCredentials(arn.accessKeyID, arn.secretAccessKey, arn.sessionToken)
 
@@ -118,7 +118,7 @@ func lookupAccountAliases(arns []Arn, assertion string, cache *AccountAliasCache
 			} else {
 				// Print the error, cast err to awserr.Error to get the Code and
 				// Message from an error.
-				journal("Unable to resolve account alias", err.Error())
+				journal("Unable to resolve account alias")
 			}
 			// return
 			continue
