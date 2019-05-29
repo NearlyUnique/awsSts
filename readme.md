@@ -27,9 +27,10 @@ Common scenario;
 - My other scripts are going to use the `default` AWS profile
 - Automatically select the role `arn:aws:iam::123456789:role/my-role`
 - Leave running in a state where I can `auto`matically refresh my token with one key press when it expires in an hour
+- Set the validity of the session (depending on thresholds of your aws user role) in Seconds, default 3600 
 
 ```
-awsSts logon --url https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices --profile default --role arn:aws:iam::123456789:role/my-role
+awsSts logon --url https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices --profile default --role arn:aws:iam::123456789:role/my-role --durationSeconds 3600
 ```
 
 `--help` for full details, including details of all parameters that can be read from environment.

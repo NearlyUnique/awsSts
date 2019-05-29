@@ -1,3 +1,3 @@
 package cmd
 
-const _VERSION = "tmark"
+const _VERSION = "v0.9"
