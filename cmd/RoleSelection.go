@@ -17,7 +17,7 @@ func SelectRole(defaultRole string, roles []Arn) (*Arn, error) {
 	list = append(list, interact.Choice{Display: "Quit", Value: 0})
 
 	for i, a := range roles {
-		if a.role == defaultRole {
+		if a.role == defaultRole || a.alias == defaultRole {
 			journal("Default role found %q\n", a.roleMenu())
 			return &a, nil
 		}
