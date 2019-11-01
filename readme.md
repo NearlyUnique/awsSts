@@ -6,7 +6,13 @@ However, it didn't work for me out of the box and used python 3 (by the time it 
 
 _For when I can't remember, STS stands for Security Token Service_
 
-# Install (with go tool chain)
+## Common errors
+
+### Linux/WSL: `x509: certificate signed by unknown authority`
+
+Make sure the certificates are installed, try `add --no-cache ca-certificates` or `sudo apt-get install ca-certificates` 
+
+## Install (with go tool chain)
 
 ```
 go get -u github.com/NearlyUnique/awsSts
@@ -16,11 +22,11 @@ Download the [Current release](/NearlyUnique/awsSts/releases/) for your platform
 
 [Change log](changelog.md)
 
-# Target Platforms
+## Target Platforms
 
 It works on Windows, I've tested linux (bash on windows) there is no reason it won't work on OSX.
 
-# Usage
+## Usage
 
 Common scenario;
 - My STS web login web page is here: `https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices`
@@ -34,7 +40,7 @@ awsSts logon --url https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.asp
 
 `--help` for full details, including details of all parameters that can be read from environment.
 
-# Roadmap
+## Roadmap
 1. Override credential file location via flag
 1. Keep running and auto refresh before expiry (optional)
 1. Deal with naming of INPUT tags in the login form, the Python sample did some work in this area, I want to improve the guessing ability and allow the user to define it if we can't guess.
@@ -56,7 +62,7 @@ awsSts logon --url https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.asp
 ```
   - the `browser_download_url` may give a redirect
 
-# How it works
+## How it works
 
 1. Download the login form, we need the cookies
 1. Fill in the user name and password
@@ -68,6 +74,6 @@ awsSts logon --url https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.asp
 1. Call AWS `AssumeRoleWithSAML`
 1. update the credentials ini file with the result
 
-# References
+## References
 
 [1] https://s3.amazonaws.com/awsiammedia/public/sample/SAMLAPICLIADFS/samlapi_formauth_adfs3.py
