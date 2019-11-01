@@ -118,7 +118,7 @@ func lookupAccountAliases(arns []Arn, assertion string, cache *AccountAliasCache
 			} else {
 				// Print the error, cast err to awserr.Error to get the Code and
 				// Message from an error.
-				journal("Unable to resolve account alias", err.Error())
+				journal("Unable to resolve account alias:%v", err.Error())
 			}
 			// return
 			continue

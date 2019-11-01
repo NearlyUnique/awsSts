@@ -103,7 +103,7 @@ func fileMustExist(filePath string) {
 	if err == nil {
 		f.Close()
 	} else {
-		fatalExitf(err, "Failed to create required file", filePath)
+		fatalExitf(err, "Failed to create required file:%s", filePath)
 	}
 }
 
