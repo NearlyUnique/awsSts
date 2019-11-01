@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -47,7 +48,16 @@ func execLogon(cmd *cobra.Command, args []string) {
 	fatalExit(err, "Getting user credentials")
 	sso := SSO{
 		Client: &http.Client{
-			Timeout: time.Second * 5,
+			Timeout: time.Second * 60,
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					Timeout:   30 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ResponseHeaderTimeout: 10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+			},
 		},
 		URL: uri,
 	}
@@ -64,7 +74,9 @@ func execLogon(cmd *cobra.Command, args []string) {
 	fatalExit(err, "Role selection")
 
 	if !arn.hasCredentials() {
-		assumeRole(session.New(), arn, saml.AsAssertion())
+		s, err := session.NewSession()
+		fatalExit(err, "New aws session")
+		assumeRole(s, arn, saml.AsAssertion())
 	}
 	if viper.GetBool("token") {
 		fmt.Printf("AWS_SESSION_TOKEN=%s\n", arn.sessionToken)
