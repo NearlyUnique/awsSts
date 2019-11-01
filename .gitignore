@@ -2,3 +2,4 @@ awsSts*
 debug*
 launch.json
 build/*
+/.idea
