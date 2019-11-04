@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
@@ -113,13 +112,4 @@ func homeDirectory() string {
 		home = os.Getenv("HOME")
 	}
 	return home
-}
-
-func bindFlags(root *cobra.Command, cmd string) {
-	for _, c := range root.Commands() {
-		if c.Name() == cmd {
-			viper.BindPFlags(c.Flags())
-			return
-		}
-	}
 }

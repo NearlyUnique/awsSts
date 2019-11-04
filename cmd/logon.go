@@ -9,34 +9,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-// logonCmd represents the logon command
-var logonCmd = &cobra.Command{
-	Use:   "logon",
-	Short: "Logon and provide temporary tokens",
-	Long:  `Using your Single Sign On credentials a temporary token will be created and stored in your .aws credentials file.`,
-	Run:   execLogon,
-}
-
-func init() {
-	RootCmd.AddCommand(logonCmd)
-
-	logonCmd.Flags().String("username", "", "Username for your Single Sign On")
-	logonCmd.Flags().String("password", "", "Password for your Single Sign On")
-	logonCmd.Flags().String("url", "", "URL for your Single Sign On")
-
-	logonCmd.Flags().StringP("profile", "p", "default", "AWS profile to store temp credentials against")
-	logonCmd.Flags().StringP("role", "r", "", "Role to auto select, if one one role available it is auto selected")
-
-	logonCmd.Flags().Bool("token", false, "If set the token is displayed (useful for tools that don't use aws credentials file)")
-
-	bindFlags(RootCmd, "logon")
-}
-
-func execLogon(cmd *cobra.Command, args []string) {
+func execLogon() {
 	uri := viper.GetString("url")
 
 	if len(uri) == 0 {

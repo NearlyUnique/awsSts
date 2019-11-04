@@ -8,11 +8,9 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
-
-var cfgFile string
 
 const (
 	configPath = ".awsSts"
@@ -20,47 +18,42 @@ const (
 	configExt  = "json"
 )
 
-const (
-	urlEnv  = "AWSSTS_URL"
-	userEnv = "AWSSTS_USER"
-	passEnv = "AWSSTS_PASS"
-)
+func Run() {
+	pflag.String("username", "", "Username for your Single Sign On")
+	pflag.String("password", "", "Password for your Single Sign On")
+	pflag.String("url", "", "URL for your Single Sign On")
 
-// RootCmd represents the base command when called without any subcommands
-var RootCmd = &cobra.Command{
-	Use:   "awsSts2",
-	Short: "Small AWS toolkit",
-	Long:  `Prime useage is to allow single sign on session for CLI`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) {	},
-}
+	pflag.StringP("profile", "p", "default", "AWS profile to store temp credentials against")
+	pflag.StringP("role", "r", "", "Role to auto select, if one one role available it is auto selected")
 
-// Execute adds all child commands to the root command sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
+	pflag.Bool("token", false, "If set the token is displayed (useful for tools that don't use aws credentials file)")
+
+	pflag.Bool("verbose", false, "Display details of internal process")
+	ver := pflag.Bool("version", false, "Display version info")
+	pflag.Bool("dump-work", false, "For HTTP requests save local copies of responses")
+
+	pflag.Usage = func() {
+		_, _ = fmt.Fprintln(os.Stdout, "Using your Single Sign On credentials a temporary token will be created and stored in your .aws credentials file.")
+		pflag.PrintDefaults()
 	}
-}
+	pflag.Parse()
 
-func init() {
-	cobra.OnInitialize(initConfig)
+	if *ver {
+		fmt.Printf("%v", _VERSION)
+		return
+	}
 
-	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "",
-		fmt.Sprintf("config file (default is $HOME/%s/%s.%s)", configPath, configName, configExt))
-	RootCmd.PersistentFlags().Bool("verbose", false, "Display details of internal process")
-	RootCmd.PersistentFlags().Bool("dump-work", false, "For HTTP requests save local copies of responses")
+	initViper()
 
-	viper.BindPFlags(RootCmd.PersistentFlags())
+	viper.BindPFlags(pflag.CommandLine)
+
+	execLogon()
 }
 
 // initConfig reads in config file and ENV variables if set.
-func initConfig() {
-	if cfgFile != "" { // enable ability to specify config file via flag
-		viper.SetConfigFile(cfgFile)
-	}
+func initViper() {
+	//viper.Set("verbose", false)   //, ""
+	//viper.Set("dump-work", false) //, "")
 
 	viper.SetConfigName(configName) // name of config file (without extension)
 	viper.SetConfigType(configExt)

@@ -1,7 +1,9 @@
 package main
 
-import "github.com/NearlyUnique/awsSts/cmd"
+import (
+	"github.com/NearlyUnique/awsSts/cmd"
+)
 
 func main() {
-	cmd.Execute()
+	cmd.Run()
 }

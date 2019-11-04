@@ -6,6 +6,30 @@ However, it didn't work for me out of the box and used python 3 (by the time it 
 
 _For when I can't remember, STS stands for Security Token Service_
 
+## Usage
+
+Common scenario;
+- My STS web login web page is here: `https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices`
+- My other scripts are going to use the `default` AWS profile
+- Automatically select the role `arn:aws:iam::123456789:role/my-role`
+- Leave running in a state where I can `auto`matically refresh my token with one key press when it expires in an hour
+
+```
+awsSts --url https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices --profile default --role arn:aws:iam::123456789:role/my-role
+```
+
+`--help` for full details, including details of all parameters that can be read from environment.
+
+On first run, if no config file exists, one will be created in `~/.awsSts/config.json`
+
+When selecting a role, the `alias` can be edited in `~/.awsSts/cache`. The `--role` (or `-r`) can be the alias rather than the full arn.
+
+For all values arguments are read from, in order, until a value is found;
+
+- config file `{"argname":"argvalue}` in `~/.awsSts/config.json`
+- environment variable `AWSSTS_argname`
+- cmd argument `-argname`
+
 ## Common errors
 
 ### Linux/WSL: `x509: certificate signed by unknown authority`
@@ -16,6 +40,7 @@ Make sure the certificates are installed, try `add --no-cache ca-certificates` o
 
 ```
 go get -u github.com/NearlyUnique/awsSts
+go build
 ```
 
 Download the [Current release](/NearlyUnique/awsSts/releases/) for your platform.
@@ -25,20 +50,6 @@ Download the [Current release](/NearlyUnique/awsSts/releases/) for your platform
 ## Target Platforms
 
 It works on Windows, I've tested linux (bash on windows) there is no reason it won't work on OSX.
-
-## Usage
-
-Common scenario;
-- My STS web login web page is here: `https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices`
-- My other scripts are going to use the `default` AWS profile
-- Automatically select the role `arn:aws:iam::123456789:role/my-role`
-- Leave running in a state where I can `auto`matically refresh my token with one key press when it expires in an hour
-
-```
-awsSts logon --url https://sts.domain.company.org/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=urn:amazon:webservices --profile default --role arn:aws:iam::123456789:role/my-role
-```
-
-`--help` for full details, including details of all parameters that can be read from environment.
 
 ## Roadmap
 1. Override credential file location via flag
