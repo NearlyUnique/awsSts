@@ -1,3 +1,3 @@
 package cmd
 
-const _VERSION = "v0.9"
+var Version = "0.0.0"

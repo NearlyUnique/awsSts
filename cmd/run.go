@@ -39,7 +39,7 @@ func Run() {
 	pflag.Parse()
 
 	if *ver {
-		fmt.Printf("%v", _VERSION)
+		fmt.Printf("%v", Version)
 		return
 	}
 
